@@ -16,10 +16,14 @@ public class MemoryController implements Observer
         addressBus = ab;
         memoryBus = mb;
         controlBus = cb;
-        memory[0] = (byte)62;
-        memory[1] = (byte)25;
-        memory[2] = (byte)71;
-        memory[3] = (byte)118;
+        memory[0] = (byte) 0x3e;       // LD   A,25
+        memory[1] = (byte) 0x19;
+        memory[2] = (byte) 0x47;       // LD   B,A
+        //memory[3] = (byte) 0x53;       // ADD  A,B
+        memory[3] = (byte) 0x32;       // LD   (007FH),A
+        memory[4] = (byte) 0x7f;
+        memory[5] = (byte) 0x0;
+        memory[6] = (byte) 0x76;      // HALT
     }
 
     @Override
@@ -32,6 +36,23 @@ public class MemoryController implements Observer
                 memoryBus.data = memory[addressBus.get()];
                 controlBus.RD = false;
                 controlBus.MREQ = false;
+            }
+            else if(controlBus.WR)
+            {
+                memory[addressBus.get()] = memoryBus.data;
+                controlBus.WR = false;
+                controlBus.MREQ = false;
+            }
+        }
+    }
+
+    public void dumpMemory()
+    {
+        for (int i = 0; i < memory.length; i++)
+        {
+            if(memory[i] != 0)
+            {
+                System.out.println("[" + i + "] : " + memory[i]);
             }
         }
     }

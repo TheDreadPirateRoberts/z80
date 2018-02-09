@@ -3,14 +3,19 @@ package co.uk.dreadpirateroberts.z80;
 import java.util.Observable;
 import java.util.Observer;
 
+import static java.lang.Thread.sleep;
+
 public class InstructionDecoder implements Observer {
+    public State state = State.Idle;
+
     private Registers registers;
     private AddressBus addressBus;
     private ControlBus controlBus;
     private MemoryBus memoryBus;
-    private State state = State.Idle;
     private byte ir = 0;
     private byte tempRegister1 = 0;
+    private byte tempRegister2 = 0;
+
 
     public InstructionDecoder(Registers r, AddressBus ab, ControlBus cb, MemoryBus mb)
     {
@@ -21,17 +26,23 @@ public class InstructionDecoder implements Observer {
     }
 
     @Override
-    public void update(Observable o, Object arg) {
+    public void update(Observable o, Object arg)
+    {
+        if(state == State.HALTING)
+            return;
+
         printState();
-        if (controlBus.M1) {
+        if (controlBus.M1)
+        {
             state = State.InstructionFetch;
             fetchInstruction();
             controlBus.M1 = false;
         }
         else
         {
-            switch(state)
-            {
+            switch(state) {
+                case HALTING:
+                    break;
                 case InstructionFetch:
                     state = State.InstructionRead;
                     readInstruction();
@@ -41,6 +52,7 @@ public class InstructionDecoder implements Observer {
                     decodeInstruction();
                     break;
                 case DataRead:
+                case DataRead2:
                     decodeInstruction();
                     break;
             }
@@ -64,7 +76,35 @@ public class InstructionDecoder implements Observer {
     {
         switch(ir)
         {
-            case 62:
+            case 0x32: // LD  (nn),A
+                if(state == State.InstructionDecode)
+                {
+                    addressBus.set(registers.PC);
+                    controlBus.MREQ = true;
+                    controlBus.RD = true;
+                    state = State.DataRead;
+                }
+                else if (state == State.DataRead)
+                {
+                    tempRegister1 = memoryBus.data;
+                    registers.PC++;
+                    addressBus.set(registers.PC);
+                    controlBus.MREQ = true;
+                    controlBus.RD = true;
+                    state = State.DataRead2;
+                }
+                else if (state == State.DataRead2)
+                {
+                    tempRegister2 = memoryBus.data;
+                    registers.PC++;
+                    addressBus.set(registers.PC);
+                    controlBus.MREQ = true;
+                    controlBus.RD = true;
+                    state = State.InstructionExecute;
+                    executeInstruction();
+                }
+                break;
+            case 0x3e: //LD   A,n
                 if(state == State.InstructionDecode)
                 {
                     addressBus.set(registers.PC);
@@ -80,11 +120,13 @@ public class InstructionDecoder implements Observer {
                     registers.PC++;
                 }
                 break;
-            case 71:
+            case 0x47: //LD   B,A
                 state = State.InstructionExecute;
                 executeInstruction();
                 break;
-            case 118:
+            case 0x53: // LD  (nn),A
+                break;
+            case 0x76: // HALT
                 state = State.InstructionExecute;
                 executeInstruction();
                 break;
@@ -93,17 +135,24 @@ public class InstructionDecoder implements Observer {
 
     private void executeInstruction()
     {
-        System.out.println("Executing ir = " + ir);
+        System.out.println("Executing ir = " + String.format("0x%02X", ir));
         switch(ir)
         {
-            case 62:
+            case 0x3e:
                 registers.A = tempRegister1;
                 break;
-            case 71:
+            case 0x47:
                 registers.B = registers.A;
                 break;
-            case 118:
-                System.exit(0);
+            case 0x32:
+                addressBus.set((128 * tempRegister1) + tempRegister2);
+                memoryBus.data = registers.A;
+                controlBus.WR = true;
+                controlBus.MREQ = true;
+                break;
+            case 0x76:
+                state = State.HALTING;
+                return;
         }
         printState();
 
@@ -113,9 +162,10 @@ public class InstructionDecoder implements Observer {
 
     private void printState()
     {
+        System.out.println();
         System.out.println("++++++++++++++++++++++++++");
         System.out.println("registers.PC = " + registers.PC);
-        System.out.println("ir = " + ir);
+        System.out.println("ir = " + String.format("0x%02X", ir));
         System.out.println("registers.A = " + registers.A);
         System.out.println("registers.B = " + registers.B);
         System.out.println("state = " + state);
@@ -129,6 +179,8 @@ public class InstructionDecoder implements Observer {
         InstructionRead,
         InstructionDecode,
         DataRead,
-        InstructionExecute
+        DataRead2,
+        InstructionExecute,
+        HALTING
     }
 }

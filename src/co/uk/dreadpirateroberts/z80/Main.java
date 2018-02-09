@@ -27,6 +27,11 @@ public class Main {
 
         while(true){
             try {
+                if(ID.state == InstructionDecoder.State.HALTING)
+                {
+                    memoryController.dumpMemory();
+                    System.exit(0);
+                }
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
